@@ -1,0 +1,25 @@
+//CO2 daily footprint variables
+String DaCO2ActkmS "Daily CO2 - newest km as Str [%s km]" <energy> {mqtt="<[mosquitto:auto1/km:state:default]"} // latest reading of km from your car as string
+Number DaCO2Actkm  "Daily CO2 - newest km  [%.0f km]" <energy> // lastest reading from your car, converted into number
+
+String DaCO2ActTankS "Daily CO2 - newest Petrol tank content as Str [%s Li]" <energy> {mqtt="<[mosquitto:auto1/tankinhalt:state:default]"} // latest reading from your car, as string
+Number DaCO2ActTank  "Daily CO2 - newest petrol tank content  [%.1f Li]" <energy> // lastest reading from your car, converted into number
+
+Number DaCO2Lastkm "Yesterdays milage in km [%.0f km]" <energy> // or whenever received a new value
+Number DaCO2LastTank "Yesterdays milage in km [%.1f Li]" <energy> 
+
+// last values from midnight to now
+Number DaCO2HeatingToday "CO2 footprint today for heating [%0.1f t]"  // always calculated as tons per year
+Number DaCO2ElecToday "CO2 footprint today for electricity [%0.1f t]" 
+Number DaCO2CarToday "CO2 footprint today for car [%0.1f t]"
+Number DaCO2AllToday "CO2 footprint today all together [%0.1f t]"
+Number DaCO2CarConsump100km "Consumption - car / 100km today [%.1f Liter/100km]" // average car consumption liter / 100km today. in other words: How was my driving style?
+
+// Daily CO2 values to be stored in database at midnight
+Number DaCO2HeatingDaily "CO2 footprint daily for heating [%0.1f t]"  // always calculated as tons per year
+Number DaCO2ElecDaily "CO2 footprint daily for electricity [%0.1f t]"
+Number DaCO2AutoDaily "CO2 footprint daily for car [%0.1f t]"
+Number DaCO2AllDaily "CO2 footprint daily all together [%0.1f t]"
+
+Number kmGefahren "kilometer driven [%0.0f km]"  // to calculate km driven today
+Number LiterConsumed "Liter consumed [%0.1f Li]"  // to calculate liter consumed today

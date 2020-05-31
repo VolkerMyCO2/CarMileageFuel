@@ -1,0 +1,169 @@
+// see also: MyCO2.org As of May 31t 2020
+//
+// 
+val MyFuelContent = 66  // how much liters to fit in my cars petrol tank
+var int OneTimeOnly =0  // make sure midnight triggers only once a night
+
+
+rule "Message Starte System fuer CO2"  // noch zu verifizieren
+when
+	System started
+then
+	
+// avoid that NULL disturbs calculations further down  -0.01 is useful to see if it was ever overwritten after initialization
+	DaCO2HeatingToday.postUpdate(-0.01)
+	DaCO2CarToday.postUpdate(-0.01)
+	DaCO2ElecToday.postUpdate(-0.01)
+	DaCO2AllToday.postUpdate(-0.01)
+	DaCO2CarConsump100km.postUpdate(-0.01)
+	LiterConsumed.postUpdate(-0.01)  
+	kmGefahren.postUpdate(-0.01)
+	OneTimeOnly=0
+end
+
+//------------------------------------ Daily values ----------------------------------------------------
+rule "reset one time only"  // Reset the one time variable so that Update daily value works 100%
+when Time cron "0 48 23 * * ?"
+then
+	OneTimeOnly=0
+end 
+
+rule "Update daily CO2 value"
+when Time cron "* 49 23 * * ?"  // check at 23:49 daily when Time cron "* 49 23 * * ?"
+// 0 47 23 did not work. routine seems to be triggered a little bit more than once per second   * 47 23 triggerd multiple times
+// users to feel free what is better. LogFile content shows if and how often it was triggered
+then
+// Daily CO2 updates
+logInfo("Info", "CO2 midnight rule running now")
+if (OneTimeOnly==0) {
+	logInfo("Info","now updating CO2 midnight values")
+	var CO2_1=DaCO2HeatingToday.state as Number
+	if (CO2_1>30) {CO2_1=30}
+	if (CO2_1 < 0) {CO2_1=0}
+ 	DaCO2HeatingDaily.postUpdate(CO2_1)
+
+	var CO2_2=DaCO2ElecToday.state as Number
+	if (CO2_2>30) {CO2_2=30}
+	if (CO2_2 < 0) {CO2_2=0}
+ 	DaCO2ElecDaily.postUpdate(CO2_2)
+
+	var CO2_3=DaCO2CarToday.state as Number
+	if (CO2_3>30) {CO2_3=30}
+	if (CO2_3 < 0) {CO2_3 =0}
+ 	DaCO2AutoDaily.postUpdate(CO2_3)
+
+	var CO2_4=DaCO2AllToday.state as Number
+	if (CO2_4>30) {CO2_4=30}
+	if (CO2_4 < 0) {CO2_4=0}
+ 	DaCO2AllDaily.postUpdate(CO2_4)
+
+	 // save fuel contents and mileage as daily value
+	var  tmp15 =DaCO2Actkm.state as Number 
+ 	//logInfo("Info", "Update DaCO2Actkm: {} ",tmp15)  Those brackets let the rule file do nonsense
+	// logInfo("Info","update act km")
+	if (tmp15 >0.0) {
+		DaCO2Lastkm.postUpdate(tmp15)
+		DaCO2Actkm.postUpdate(0)
+	}
+	var tmp16 =DaCO2ActTank.state as Number  
+	if (tmp16 >0.0) {
+		DaCO2LastTank.postUpdate(tmp16)
+		logInfo("Info", "Midnight Update DaCO2LastTank")
+		DaCO2ActTank.postUpdate(0)
+	}
+// New day, new counting on CO2 daily footprint
+	DaCO2HeatingToday.postUpdate(0)
+	DaCO2CarToday.postUpdate(0)
+	DaCO2ElecToday.postUpdate(0)
+	DaCO2AllToday.postUpdate(0)
+	LiterConsumed.postUpdate(0)
+	kmGefahren.postUpdate(0)   // sorry ,a few german phrases left:  means "km driven today"
+	DaCO2CarConsump100km.postUpdate(0)
+	OneTimeOnly =1
+	createTimer(now.plusMinutes(2)) [| OneTimeOnly =0 ]
+	
+}
+//logInfo("Info", "Update DaCO2LastTank {} ",DaCO2LastTank.state)
+end
+
+
+// -----------------------------------------------  Type conversions and min/max-------------------------------------------
+
+rule "Convert km Auto"
+when
+	Item DaCO2ActkmS  changed
+then
+	// check new incoming km value and check for validity
+	DaCO2Actkm.postUpdate(Float::parseFloat(String::format("%s", DaCO2ActkmS.state).replace(' ','')))
+	if (DaCO2Actkm.state > 100000) {    // Limitiere Wert auf 0...100000
+		DaCO2Actkm.postUpdate(100000)
+	}
+	if (DaCO2Actkm.state < 0) {
+		DaCO2Actkm.postUpdate(0)
+	}
+end
+
+rule "Convert Tankinhalt km Auto"
+when
+	Item DaCO2ActTankS changed
+then
+	// check new incoming fuel level and check for validity
+	DaCO2ActTank.postUpdate(Float::parseFloat(String::format("%s", DaCO2ActTankS.state).replace(' ','')))
+	if (DaCO2ActTank.state > MyFuelContent) {    // Limitiere Wert auf 0...66 Liter voller Tank
+		DaCO2ActTank.postUpdate(MyFuelContent)
+	}
+	if (DaCO2ActTank.state < 0) {
+		DaCO2ActTank.postUpdate(0)
+	}
+end
+
+//  Calculate the consumption on 100km as well as CO2 total for the day 
+rule "Calc CO2 Auto today"
+when
+	Time cron  "0 */10 * * * ?" or
+	Item DaCO2ActTankS changed or
+	Item DaCO2ActkmS  changed
+then
+
+// if liters and the consumption both making sense: calculate CO2 by difference in tank content
+// if you fuled up your car: Liters are no longer valid. Calculate on km driven at a standard consumption. Feel free to change the 6l/100km
+DaCO2CarConsump100km.postUpdate(0)
+
+// We should see less tank content of course
+var float LiterConsumedLoc =(DaCO2LastTank.state as Number).floatValue - (DaCO2ActTank.state as Number).floatValue
+if (LiterConsumedLoc <0) {LiterConsumedLoc=0}
+if (LiterConsumedLoc > MyFuelContent) {LiterConsumedLoc=MyFuelContent}
+LiterConsumed.postUpdate(LiterConsumedLoc)
+
+// km increasing of course
+var float KmDrivenLoc = (DaCO2Actkm.state as Number).floatValue - (DaCO2Lastkm.state as Number).floatValue
+if (KmDrivenLoc <0) {KmDrivenLoc=0}
+if (KmDrivenLoc >800) {KmDrivenLoc=800}   // random value for max km to avoid or limit silly calculations
+kmGefahren.postUpdate(KmDrivenLoc)
+
+DaCO2CarToday.postUpdate(0) // Default: starting: no clue - set to zero
+
+//fall back position if you fueled up: CO2 calculation by driven km at a standard consumption
+// 1 Liter Diesel produced 2.65Kg CO2,  1 Liter normal fuel produced 2.37Kg CO2  
+// this result for Diesel in: 0.967 tons CO2 per anum per Liter Diesel
+if (KmDrivenLoc >0 ) {
+	DaCO2CarToday.postUpdate(KmDrivenLoc / 100.0 * 6.0 * 0.967)	 	
+}
+
+// Check consumption per 100km, if value ok, let us calculate on it
+// nice side effect: calculate your driving style in liter / 100km today
+// if you prefer miles per gallon, simply ask wikipedia: https://de.wikipedia.org/wiki/Kraftstoffverbrauch  miles /gallon (US) = 235 / Liter per 100km
+if ((LiterConsumedLoc >0) && (KmDrivenLoc >0)) {  
+	var float tmp11 =  (LiterConsumedLoc /  KmDrivenLoc * 100.0).floatValue
+	DaCO2CarConsump100km.postUpdate(tmp11)	
+}
+
+// you find here boundaries of 3...18Liter/100km as valid values, please adopt to your own experience
+if ((DaCO2CarConsump100km.state >3.0) && (DaCO2CarConsump100km.state <18.0)) {  
+	DaCO2CarToday.postUpdate(LiterConsumedLoc*0.967)	
+}
+
+// calculate new footprint total each 10 min
+var float tmp13 = ((DaCO2HeatingToday.state as Number).floatValue + (DaCO2ElecToday.state as Number).floatValue + (DaCO2CarToday.state as Number).floatValue).floatValue
+	DaCO2AllToday.postUpdate(tmp13)
+end
