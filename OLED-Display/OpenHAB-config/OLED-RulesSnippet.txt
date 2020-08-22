@@ -1,0 +1,79 @@
+var int DisplayMsg = 0  // for OLED display
+
+
+rule "UpdateDisplay1"
+
+when
+	Time cron "0 0/1 * * * ?" // means: every 1 minute
+then
+	
+	var CurrentHour = now.getHourOfDay
+	
+	 
+	
+	switch(DisplayMsg) {
+			case 0: {
+				dstr = "SolThermHeute " + SolarWaermeHeute.state  +":kWh"
+			}
+			case 1: {
+				dstr = "SolElekHeute " + SolarStromHeute.state  +":kWh"
+			} 
+			
+			case 2 : {
+				dstr = "HausStrom " + Power_House.state + ":W"
+			}
+			
+			case 3 : {
+				dstr = "AussenTemp " + Aussentemp.state + ":°C"
+			}
+			
+			case 4 : {
+				dstr = "Haus_kWh " + kWh_Heute.state + ":kWh"
+			}
+			case 5 : {
+				dstr = "Haus_Wmin " + Wmin_HeuteS.state + ":W"
+			}
+			case 6: {
+				dstr = "Wasser " + Water_Today.state + ":L"
+			}
+			case 7: {
+				dstr = "PufferOben " + Temp_Puffer_Oben.state + ":°C" 
+			}
+			
+			case 8: {
+				dstr = "CO2_Wozi " + CO2Wozi.state + ":ppm"
+			}
+			case 9: {
+				//dstr = "CO2_Bilanz " + DaCO2AllToday.state + ":t"
+				dstr = "CO2_Bilanz " + DaCO2AllDaily.state + ":t"   //Tagesendwert, nur um Dezimalen zu testen
+			}
+			case 10: {
+				dstr = "SolarThermie " + SolarThermiePower.state +":W"
+			}
+			case 11: {
+				dstr = "SolarStrom " + SolarElectricPower.state  +":W"
+			}
+	}
+	DisplayMsg = DisplayMsg + 1
+	// if ((Elevation.state > 4)  && (CurrentHour < 9) ) 
+	// morning before sunrise Nothing about solar to display
+	if ((Elevation.state < 1)  && (CurrentHour < 9) ) {
+		if (DisplayMsg > 9 ) {
+			DisplayMsg=3
+		}
+	}
+
+	// evening after sunset: no solar actuals, but still daily sums
+	if ((Elevation.state < 12)  && (CurrentHour > 16) ) {
+		if (DisplayMsg > 8 ) {
+			DisplayMsg=0
+		}
+	}
+
+	if (DisplayMsg > 11) {
+		DisplayMsg = 0
+	}
+
+	postUpdate (TestStr1, dstr)    // just for debugging
+	Display1.sendCommand(dstr)    // Well, this is the only code row needed to send the content to the little OLED display by MQTT
+	end
