@@ -1,0 +1,72 @@
+//Snippet for .ITEMS for temperature measuring -----------------------
+
+String AllgTempS "Generic Temp [%s °C]" <temperature> {mqtt="<[mosquitto:allg/temp:state:default]"}
+Number AllgTemp  "Generic Temp [%.1f °C]" <temperature> (gHeizTemp)
+Number HeizMinutes  "Heating on in Minutes [%.0f min]" <temperature> (gHeizTemp)
+
+
+// Snippet for RULES file --------------------------------------------
+var Number tmp91 =0 // for HeizMinutes
+var long PelletStartTime = 0
+var long PelletsLastUpdate = 0
+
+
+// in my case: PelletsS came from a different System via Bacnet as Kg already.
+// in your case: Might have been a counter input from an 8266 via MQTT
+
+rule "Convert PelletsKgHeute"
+when
+	Item PelletsS changed
+then
+if (PelletsS.toString.contains ("rror")) {
+} else{
+	Pellets.postUpdate(Float::parseFloat(String::format("%s", PelletsS.state).replace(' ','')))
+//  do it on the fly:  CO2 daily for the pellet heating. Source: https://www.heizungsfinder.de/pelletheizung/einordnung/umweltbilanz
+// 23g CO2 emission per kWh  or: 1Kg Pellets = 5kWh = 115g CO2   *365Days = 41Kg or 0.041To.  Divide by number of people underneath your roof
+
+tmp91 = Pellets.state as Number
+tmp91 = tmp91 * 0.011
+DaCO2HeatingToday.postUpdate(tmp91)  // for daily CO2
+
+var Number Minutes = (now.millis - PelletsLastUpdate) / 60000
+PelletsLastUpdate = now.millis
+
+if (Minutes > 2) {  // no pellets feeded for more than 2 minutes: burner most likely finished
+		HeizMinutes.postUpdate(0)
+		PelletStartTime=now.millis
+	}
+	if (Minutes <= 2) {  // Pellets feeded last time less than 2 minutes: burner most likely running still
+		var Number tmp95 = (now.millis - PelletStartTime) / 60000
+		HeizMinutes.postUpdate(tmp95)
+	}
+}
+
+end
+
+
+// snippit for .RULES to read in temperature from an 8266
+// let me know if you found something easier to handle incoming MQTT numbers
+rule "AllgemeinTemp"
+when
+	Item AllgTempS changed
+then
+	if (AllgTempS.toString.contains ("rror")) {
+		} else {
+			AllgTemp.postUpdate(Float::parseFloat(String::format("%s", AllgTempS.state).replace(' ','')))
+		}
+	end
+	
+	
+// Reset HeizMinutes at system start and at midnight
+rule "Midnight Resets"
+when Time cron "0 1 0 * * ?"  // check at 0:01 after midnight
+then
+	HeizMinutes.postUpdate(0)
+end
+
+rule "Message Start System"  // noch zu verifizieren
+when
+	System started
+then
+	HeizMinutes.postUpdate(0)
+end
